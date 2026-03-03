@@ -25,7 +25,7 @@ export default async function HomePage() {
       <div className="pointer-events-none absolute -left-20 top-24 h-56 w-56 animate-drift rounded-full bg-haze/50 blur-3xl" />
       <div className="pointer-events-none absolute -right-14 top-40 h-44 w-44 animate-drift rounded-full bg-glow/50 blur-3xl [animation-delay:1.2s]" />
 
-      <div className="mx-auto w-full max-w-6xl">
+      <div className="mx-auto w-full max-w-8xl">
         <section className="mb-8 rounded-3xl border border-amber-100 bg-white/75 p-7 shadow-halo backdrop-blur">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-ember">Bye-Bye Shushu</p>
           <h1 className="mt-2 text-4xl text-ink md:text-5xl">A living wall of grandmother&apos;s memories</h1>
