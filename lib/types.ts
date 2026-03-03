@@ -6,14 +6,20 @@ export type MemoryCategory =
   | "Special Days"
   | "Other";
 
+export type MemoryPhoto = {
+  id: string;
+  imageData: string;
+  zoom: number;
+  rotation: number;
+  sortOrder: number;
+};
+
 export type Memory = {
   id: string;
   title: string;
   category: string;
   story: string | null;
-  imageData: string;
-  zoom: number;
-  rotation: number;
+  photos: MemoryPhoto[];
   createdAt: string;
 };
 
@@ -21,7 +27,9 @@ export type CreateMemoryInput = {
   title: string;
   category: string;
   story?: string;
-  imageData: string;
-  zoom: number;
-  rotation: number;
+  photos: Array<{
+    imageData: string;
+    zoom: number;
+    rotation: number;
+  }>;
 };

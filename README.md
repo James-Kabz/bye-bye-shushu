@@ -1,64 +1,53 @@
 # bye-bye-shushu
 
-An interactive memorial wall built with Next.js and Neon PostgreSQL. Family and friends can post photos and memories, apply zoom/rotation to fit images, and browse by titled categories like:
-
-- Grandma and her GrandKids
-- Shushu and her Kids
+An interactive memorial wall built with Next.js and Neon PostgreSQL.
+Family and friends can view every memory, while posting is protected with a shared family password.
 
 ## Features
 
-- Public memory gallery for photos + stories
-- Interactive image selector with:
-  - zoom control
-  - rotation control
-  - client-side image optimization before upload
-- Category + title support on every memory card
-- Neon-ready Postgres persistence
-- Warm, "magical" memorial-inspired UI
+- Public home page gallery for all shared memories
+- Password-gated posting flow using env-based password
+- One memory entry can contain multiple photos under one title + category
+- Per-photo editing before upload:
+  - zoom
+  - rotation
+- Click any gallery photo to expand it fullscreen
+- Neon-backed Postgres persistence with auto table setup
 
-## 1) Set up Neon
+## Setup
 
-Create a Neon project/database, then copy your connection string into `.env`:
+1. Copy env template:
 
 ```bash
-cp .env.example .env
+cp .env.example .env.local
 ```
 
-Set:
+2. Fill these values in `.env.local`:
 
 ```env
 DATABASE_URL="postgresql://USER:PASSWORD@YOUR-NEON-HOST/bye_bye_shushu?sslmode=require"
+POST_ACCESS_PASSWORD="choose-a-strong-family-password"
+AUTH_SECRET="long-random-secret-for-cookie-signing"
 ```
 
-The app auto-creates the `memories` table on first read/write.
-
-## 2) Install dependencies
+3. Install and run:
 
 ```bash
 npm install
-```
-
-## 3) Run
-
-```bash
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Database schema
+## Vercel env vars
 
-The app creates this table if missing:
+Set these in Vercel project Environment Variables for Production/Preview/Development:
 
-```sql
-CREATE TABLE IF NOT EXISTS memories (
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  category TEXT NOT NULL,
-  story TEXT,
-  image_data TEXT NOT NULL,
-  zoom DOUBLE PRECISION NOT NULL DEFAULT 1,
-  rotation DOUBLE PRECISION NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-```
+- `DATABASE_URL`
+- `POST_ACCESS_PASSWORD`
+- `AUTH_SECRET`
+
+## Database behavior
+
+The app auto-creates/updates the `memories` table on first read/write.
+Each uploaded photo is stored as one row, linked by `memory_group_id` so multiple photos stay under one memory entry.

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { isPostAuthenticated } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/error-utils";
 import { createMemory, listMemories } from "@/lib/memories";
 
@@ -18,6 +19,14 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const isAuthorized = await isPostAuthenticated();
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { message: "Login required. Please enter the posting password first." },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const memory = await createMemory(body);
     return NextResponse.json({ memory }, { status: 201 });
