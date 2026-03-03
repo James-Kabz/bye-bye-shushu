@@ -1,5 +1,7 @@
 import { MemoryForm } from "@/components/memory-form";
+import { getErrorMessage } from "@/lib/error-utils";
 import { listMemories } from "@/lib/memories";
+import type { Memory } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +14,15 @@ function formatDate(iso: string): string {
 }
 
 export default async function HomePage() {
-  const memories = await listMemories();
+  let memories: Memory[] = [];
+  let loadError = "";
+
+  try {
+    memories = await listMemories();
+  } catch (error) {
+    loadError = getErrorMessage(error);
+    console.error("HomePage listMemories failed:", error);
+  }
 
   return (
     <main className="relative min-h-screen overflow-hidden px-4 pb-20 pt-12 md:px-8">
@@ -33,6 +43,11 @@ export default async function HomePage() {
           <MemoryForm />
 
           <section className="animate-rise rounded-3xl border border-amber-100 bg-white/80 p-6 shadow-halo backdrop-blur [animation-delay:120ms]">
+            {loadError ? (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                Database issue: {loadError}
+              </div>
+            ) : null}
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-2xl text-ink">Memory gallery</h2>
               <span className="rounded-full bg-ember/10 px-3 py-1 text-xs font-semibold text-ember">

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { getErrorMessage } from "@/lib/error-utils";
 import { createMemory, listMemories } from "@/lib/memories";
 
 export async function GET() {
@@ -9,7 +10,7 @@ export async function GET() {
   } catch (error) {
     console.error("GET /api/memories failed", error);
     return NextResponse.json(
-      { message: "Unable to fetch memories right now." },
+      { message: `Unable to fetch memories right now. ${getErrorMessage(error)}` },
       { status: 500 }
     );
   }
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
 
     console.error("POST /api/memories failed", error);
     return NextResponse.json(
-      { message: "Could not save this memory. Try again." },
+      { message: `Could not save this memory. ${getErrorMessage(error)}` },
       { status: 500 }
     );
   }

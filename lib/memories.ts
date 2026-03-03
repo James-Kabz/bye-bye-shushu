@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { pool } from "@/lib/db";
+import { getErrorMessage } from "@/lib/error-utils";
 import type { CreateMemoryInput, Memory } from "@/lib/types";
 
 type MemoryRow = {
@@ -35,18 +36,22 @@ async function ensureMemoriesTable() {
     return;
   }
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS memories (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      category TEXT NOT NULL,
-      story TEXT,
-      image_data TEXT NOT NULL,
-      zoom DOUBLE PRECISION NOT NULL DEFAULT 1,
-      rotation DOUBLE PRECISION NOT NULL DEFAULT 0,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS memories (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        category TEXT NOT NULL,
+        story TEXT,
+        image_data TEXT NOT NULL,
+        zoom DOUBLE PRECISION NOT NULL DEFAULT 1,
+        rotation DOUBLE PRECISION NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+  } catch (error) {
+    throw new Error(`Could not connect to Neon database: ${getErrorMessage(error)}`);
+  }
 
   tableReady = true;
 }
