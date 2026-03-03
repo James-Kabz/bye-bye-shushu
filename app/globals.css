@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --shell: #fff7ef;
+  --ember: #db5c51;
+  --glow: #f6d365;
+  --haze: #ffd8b9;
+  --ink: #272221;
+  --font-display: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  --font-body: "Trebuchet MS", "Lucida Sans Unicode", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-body), sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 10% 20%, rgba(246, 211, 101, 0.26), transparent 36%),
+    radial-gradient(circle at 90% 0%, rgba(219, 92, 81, 0.16), transparent 38%),
+    linear-gradient(180deg, #fff8f2 0%, #fff3e6 55%, #fffdf8 100%);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display), serif;
+  letter-spacing: 0.01em;
+}
+
+.memory-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #df7669 #fff7ef;
+}
+
+.memory-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.memory-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #e98572, #d65659);
+  border-radius: 999px;
+}
+
+.memory-scroll::-webkit-scrollbar-track {
+  background: #fff6ec;
+}
