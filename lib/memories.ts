@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { pool } from "@/lib/db";
+import { dbConnectionInfo, pool } from "@/lib/db";
 import { getErrorMessage } from "@/lib/error-utils";
 import type { CreateMemoryInput, Memory } from "@/lib/types";
 
@@ -50,7 +50,9 @@ async function ensureMemoriesTable() {
       );
     `);
   } catch (error) {
-    throw new Error(`Could not connect to Neon database: ${getErrorMessage(error)}`);
+    throw new Error(
+      `Could not connect to Neon database (${dbConnectionInfo.source} -> ${dbConnectionInfo.host}): ${getErrorMessage(error)}`
+    );
   }
 
   tableReady = true;
