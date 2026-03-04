@@ -28,8 +28,25 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const memory = body?.appendToMemoryId ? await appendPhotosToMemory(body) : await createMemory(body);
-    return NextResponse.json({ memory }, { status: body?.appendToMemoryId ? 200 : 201 });
+    const isAppend = Boolean(body?.appendToMemoryId);
+    let memoryId = "";
+
+    if (isAppend) {
+      const appendedMemory = await appendPhotosToMemory(body);
+      memoryId = appendedMemory.id;
+    } else {
+      const createdMemory = await createMemory(body);
+      memoryId = createdMemory.id;
+    }
+
+    return NextResponse.json(
+      {
+        ok: true,
+        memoryId,
+        message: isAppend ? "Photos added successfully." : "Memory saved successfully."
+      },
+      { status: isAppend ? 200 : 201 }
+    );
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json(

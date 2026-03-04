@@ -12,6 +12,9 @@ const categoryOptions = [
   "Special Days",
   "Other"
 ] as const;
+const MAX_PHOTOS_PER_MEMORY = 20;
+const MAX_PHOTOS_PER_REQUEST = 4;
+const TARGET_REQUEST_BODY_CHARS = 1_800_000;
 
 type SaveState = "idle" | "saving" | "error";
 type FormMode = "new" | "append";
@@ -28,6 +31,39 @@ type MemoryFormProps = {
   canPostInitial: boolean;
   existingMemories: MemorySummary[];
 };
+
+type UploadPhotoPayload = {
+  imageData: string;
+  zoom: number;
+  rotation: number;
+};
+
+function chunkPhotosForUpload(photos: UploadPhotoPayload[]): UploadPhotoPayload[][] {
+  const chunks: UploadPhotoPayload[][] = [];
+  let current: UploadPhotoPayload[] = [];
+  let currentSize = 0;
+
+  for (const photo of photos) {
+    const estimatedPhotoSize = photo.imageData.length + 200;
+    const wouldExceedCount = current.length >= MAX_PHOTOS_PER_REQUEST;
+    const wouldExceedBodySize = current.length > 0 && currentSize + estimatedPhotoSize > TARGET_REQUEST_BODY_CHARS;
+
+    if (wouldExceedCount || wouldExceedBodySize) {
+      chunks.push(current);
+      current = [];
+      currentSize = 0;
+    }
+
+    current.push(photo);
+    currentSize += estimatedPhotoSize;
+  }
+
+  if (current.length > 0) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -56,7 +92,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 async function optimizeImage(file: File): Promise<string> {
   const dataUrl = await fileToDataUrl(file);
   const image = await loadImage(dataUrl);
-  const maxSide = 1600;
+  const maxSide = 1100;
   const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
   const width = Math.max(1, Math.round(image.width * ratio));
   const height = Math.max(1, Math.round(image.height * ratio));
@@ -71,7 +107,7 @@ async function optimizeImage(file: File): Promise<string> {
   }
 
   ctx.drawImage(image, 0, 0, width, height);
-  return canvas.toDataURL("image/jpeg", 0.88);
+  return canvas.toDataURL("image/jpeg", 0.72);
 }
 
 export function MemoryForm({ canPostInitial, existingMemories }: MemoryFormProps) {
@@ -166,7 +202,7 @@ export function MemoryForm({ canPostInitial, existingMemories }: MemoryFormProps
       setStatus("idle");
       setMessage("");
 
-      const selectedFiles = Array.from(fileList).slice(0, 24);
+      const selectedFiles = Array.from(fileList).slice(0, MAX_PHOTOS_PER_MEMORY);
       const generatedPhotos: EditablePhoto[] = [];
 
       for (const file of selectedFiles) {
@@ -179,13 +215,13 @@ export function MemoryForm({ canPostInitial, existingMemories }: MemoryFormProps
           id: crypto.randomUUID(),
           name: file.name,
           imageData: optimized,
-          zoom: 1.1,
+          zoom: 1,
           rotation: 0
         });
       }
 
       setPhotos((previous) => {
-        const merged = [...previous, ...generatedPhotos].slice(0, 24);
+        const merged = [...previous, ...generatedPhotos].slice(0, MAX_PHOTOS_PER_MEMORY);
         if (!activePhotoId && merged[0]) {
           setActivePhotoId(merged[0].id);
         }
@@ -257,31 +293,45 @@ export function MemoryForm({ canPostInitial, existingMemories }: MemoryFormProps
         zoom: photo.zoom,
         rotation: photo.rotation
       }));
+      const photoChunks = chunkPhotosForUpload(photosPayload);
+      const totalChunks = photoChunks.length;
 
-      const requestBody =
-        formMode === "append"
-          ? {
-              appendToMemoryId: selectedMemoryId,
-              photos: photosPayload
-            }
-          : {
-              title,
-              category: finalCategory,
-              story,
-              photos: photosPayload
-            };
+      let targetMemoryId = formMode === "append" ? selectedMemoryId : "";
 
-      const response = await fetch("/api/memories", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(requestBody)
-      });
+      for (const [chunkIndex, chunk] of photoChunks.entries()) {
+        setMessage(`Uploading photos ${chunkIndex + 1}/${totalChunks}...`);
 
-      const responseBody = (await response.json()) as { message?: string };
-      if (!response.ok) {
-        throw new Error(responseBody.message ?? "Could not save memory.");
+        const requestBody =
+          chunkIndex === 0 && formMode === "new"
+            ? {
+                title,
+                category: finalCategory,
+                story,
+                photos: chunk
+              }
+            : {
+                appendToMemoryId: targetMemoryId,
+                photos: chunk
+              };
+
+        const response = await fetch("/api/memories", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        const responseBody = (await response.json()) as { message?: string; memoryId?: string };
+        if (!response.ok) {
+          throw new Error(responseBody.message ?? "Could not save memory.");
+        }
+
+        if (!responseBody.memoryId) {
+          throw new Error("Upload completed without memory id.");
+        }
+
+        targetMemoryId = responseBody.memoryId;
       }
 
       setTitle("");
@@ -475,7 +525,7 @@ export function MemoryForm({ canPostInitial, existingMemories }: MemoryFormProps
       )}
 
       <label className="mt-4 flex flex-col gap-2 text-sm font-medium text-ink">
-        Choose photos (you can pick many)
+        Choose photos (up to 20)
         <input
           type="file"
           accept="image/png,image/jpeg,image/jpg,image/webp"
@@ -516,7 +566,7 @@ export function MemoryForm({ canPostInitial, existingMemories }: MemoryFormProps
             <img
               src={activePhoto.imageData}
               alt="Selected memory"
-              className="absolute left-1/2 top-1/2 max-w-full object-cover"
+              className="absolute left-1/2 top-1/2 max-w-full object-contain"
               style={{
                 transform: `translate(-50%, -50%) scale(${activePhoto.zoom}) rotate(${activePhoto.rotation}deg)`,
                 width: "100%",
@@ -536,7 +586,7 @@ export function MemoryForm({ canPostInitial, existingMemories }: MemoryFormProps
               Zoom: {activePhoto.zoom.toFixed(2)}x
               <input
                 type="range"
-                min={1}
+                min={0.6}
                 max={2.8}
                 step={0.01}
                 value={activePhoto.zoom}

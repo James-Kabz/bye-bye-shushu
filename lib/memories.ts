@@ -30,12 +30,12 @@ const createMemorySchema = z.object({
     .array(
       z.object({
         imageData: imageDataSchema,
-        zoom: z.number().min(1).max(2.8),
+        zoom: z.number().min(0.6).max(2.8),
         rotation: z.number().min(-180).max(180)
       })
     )
     .min(1, "Please add at least one photo.")
-    .max(24, "Please upload up to 24 photos per memory.")
+    .max(20, "Please upload up to 20 photos per memory.")
 });
 
 const appendMemoryPhotosSchema = z.object({
@@ -44,12 +44,12 @@ const appendMemoryPhotosSchema = z.object({
     .array(
       z.object({
         imageData: imageDataSchema,
-        zoom: z.number().min(1).max(2.8),
+        zoom: z.number().min(0.6).max(2.8),
         rotation: z.number().min(-180).max(180)
       })
     )
     .min(1, "Please add at least one photo.")
-    .max(24, "Please upload up to 24 photos at a time.")
+    .max(20, "Please upload up to 20 photos at a time.")
 });
 
 const deleteMemoryPhotoSchema = z.object({

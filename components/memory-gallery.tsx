@@ -264,7 +264,8 @@ export function MemoryGallery({ memories, loadError, canManage }: MemoryGalleryP
                         transform: `scale(${photo.zoom}) rotate(${photo.rotation}deg)`,
                         width: "100%",
                         height: "170px",
-                        objectFit: "cover"
+                        objectFit: "contain",
+                        backgroundColor: "#fff"
                       }}
                     />
                   </button>
