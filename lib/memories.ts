@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { dbConnectionInfo, pool } from "@/lib/db";
 import { getErrorMessage } from "@/lib/error-utils";
-import type { CreateMemoryInput, Memory, MemoryPhoto } from "@/lib/types";
+import type { AppendMemoryPhotosInput, CreateMemoryInput, Memory, MemoryPhoto } from "@/lib/types";
 
 type MemoryRow = {
   id: string;
@@ -36,6 +36,24 @@ const createMemorySchema = z.object({
     )
     .min(1, "Please add at least one photo.")
     .max(24, "Please upload up to 24 photos per memory.")
+});
+
+const appendMemoryPhotosSchema = z.object({
+  appendToMemoryId: z.string().uuid("Invalid memory selection."),
+  photos: z
+    .array(
+      z.object({
+        imageData: imageDataSchema,
+        zoom: z.number().min(1).max(2.8),
+        rotation: z.number().min(-180).max(180)
+      })
+    )
+    .min(1, "Please add at least one photo.")
+    .max(24, "Please upload up to 24 photos at a time.")
+});
+
+const deleteMemoryPhotoSchema = z.object({
+  photoId: z.string().uuid("Invalid photo selection.")
 });
 
 let tableReady = false;
@@ -197,4 +215,123 @@ export async function createMemory(input: CreateMemoryInput): Promise<Memory> {
   );
 
   return mapRowsToMemories(createdRows.rows)[0];
+}
+
+export async function appendPhotosToMemory(input: AppendMemoryPhotosInput): Promise<Memory> {
+  await ensureMemoriesTable();
+  const parsed = appendMemoryPhotosSchema.parse(input);
+
+  const targetMemoryResult = await pool.query<{
+    group_id: string;
+    title: string;
+    category: string;
+    story: string | null;
+  }>(
+    `SELECT
+      COALESCE(memory_group_id, id) AS group_id,
+      title,
+      category,
+      story
+     FROM memories
+     WHERE COALESCE(memory_group_id, id) = $1
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    [parsed.appendToMemoryId]
+  );
+
+  const targetMemory = targetMemoryResult.rows[0];
+  if (!targetMemory) {
+    throw new Error("Selected memory category no longer exists.");
+  }
+
+  const sortInfoResult = await pool.query<{ max_sort_order: number }>(
+    `SELECT COALESCE(MAX(sort_order), -1) AS max_sort_order
+     FROM memories
+     WHERE COALESCE(memory_group_id, id) = $1`,
+    [targetMemory.group_id]
+  );
+
+  const startSortOrder = Number(sortInfoResult.rows[0]?.max_sort_order ?? -1) + 1;
+
+  const values: Array<string | number | null> = [];
+  const valueBlocks = parsed.photos.map((photo, index) => {
+    const base = index * 9;
+    values.push(
+      crypto.randomUUID(),
+      targetMemory.group_id,
+      targetMemory.title,
+      targetMemory.category,
+      targetMemory.story,
+      photo.imageData,
+      photo.zoom,
+      photo.rotation,
+      startSortOrder + index
+    );
+
+    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9})`;
+  });
+
+  await pool.query(
+    `INSERT INTO memories (
+      id,
+      memory_group_id,
+      title,
+      category,
+      story,
+      image_data,
+      zoom,
+      rotation,
+      sort_order
+    ) VALUES ${valueBlocks.join(",")}`,
+    values
+  );
+
+  const updatedRows = await pool.query<MemoryRow>(
+    `SELECT
+      id,
+      memory_group_id,
+      title,
+      category,
+      story,
+      image_data,
+      zoom,
+      rotation,
+      sort_order,
+      created_at
+     FROM memories
+     WHERE COALESCE(memory_group_id, id) = $1
+     ORDER BY sort_order ASC, created_at ASC`,
+    [targetMemory.group_id]
+  );
+
+  return mapRowsToMemories(updatedRows.rows)[0];
+}
+
+export async function deleteMemoryPhoto(input: { photoId: string }): Promise<{ remainingPhotos: number }> {
+  await ensureMemoriesTable();
+  const parsed = deleteMemoryPhotoSchema.parse(input);
+
+  const targetResult = await pool.query<{ group_id: string }>(
+    `SELECT COALESCE(memory_group_id, id) AS group_id
+     FROM memories
+     WHERE id = $1
+     LIMIT 1`,
+    [parsed.photoId]
+  );
+
+  const target = targetResult.rows[0];
+  if (!target) {
+    throw new Error("Selected photo no longer exists.");
+  }
+
+  await pool.query(`DELETE FROM memories WHERE id = $1`, [parsed.photoId]);
+
+  const remainingResult = await pool.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count
+     FROM memories
+     WHERE COALESCE(memory_group_id, id) = $1`,
+    [target.group_id]
+  );
+
+  return { remainingPhotos: Number(remainingResult.rows[0]?.count ?? "0") };
 }

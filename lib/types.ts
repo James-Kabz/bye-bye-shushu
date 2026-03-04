@@ -33,3 +33,19 @@ export type CreateMemoryInput = {
     rotation: number;
   }>;
 };
+
+export type AppendMemoryPhotosInput = {
+  appendToMemoryId: string;
+  photos: Array<{
+    imageData: string;
+    zoom: number;
+    rotation: number;
+  }>;
+};
+
+export type MemorySummary = {
+  id: string;
+  title: string;
+  category: string;
+  photoCount: number;
+};

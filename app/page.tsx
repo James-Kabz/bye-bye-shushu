@@ -3,7 +3,7 @@ import { MemoryGallery } from "@/components/memory-gallery";
 import { isPostAuthenticated } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/error-utils";
 import { listMemories } from "@/lib/memories";
-import type { Memory } from "@/lib/types";
+import type { Memory, MemorySummary } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,12 @@ export default async function HomePage() {
   }
 
   const canPost = await isPostAuthenticated();
+  const existingMemories: MemorySummary[] = memories.map((memory) => ({
+    id: memory.id,
+    title: memory.title,
+    category: memory.category,
+    photoCount: memory.photos.length
+  }));
 
   return (
     <main className="max-w-full relative min-h-screen overflow-hidden px-4 pb-20 pt-12 md:px-8">
@@ -36,8 +42,8 @@ export default async function HomePage() {
         </section>
 
         <div className="grid gap-8 lg:grid-cols-[1.05fr_1.35fr]">
-          <MemoryForm canPostInitial={canPost} />
-          <MemoryGallery memories={memories} loadError={loadError} />
+          <MemoryForm canPostInitial={canPost} existingMemories={existingMemories} />
+          <MemoryGallery memories={memories} loadError={loadError} canManage={canPost} />
         </div>
       </div>
     </main>

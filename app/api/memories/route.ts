@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { isPostAuthenticated } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/error-utils";
-import { createMemory, listMemories } from "@/lib/memories";
+import { appendPhotosToMemory, createMemory, deleteMemoryPhoto, listMemories } from "@/lib/memories";
 
 export async function GET() {
   try {
@@ -28,8 +28,8 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const memory = await createMemory(body);
-    return NextResponse.json({ memory }, { status: 201 });
+    const memory = body?.appendToMemoryId ? await appendPhotosToMemory(body) : await createMemory(body);
+    return NextResponse.json({ memory }, { status: body?.appendToMemoryId ? 200 : 201 });
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json(
@@ -41,6 +41,35 @@ export async function POST(request: Request) {
     console.error("POST /api/memories failed", error);
     return NextResponse.json(
       { message: `Could not save this memory. ${getErrorMessage(error)}` },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const isAuthorized = await isPostAuthenticated();
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { message: "Login required. Please enter the posting password first." },
+        { status: 401 }
+      );
+    }
+
+    const body = (await request.json()) as { photoId?: string };
+    const result = await deleteMemoryPhoto({ photoId: body?.photoId ?? "" });
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { message: error.issues[0]?.message ?? "Invalid delete request." },
+        { status: 400 }
+      );
+    }
+
+    console.error("DELETE /api/memories failed", error);
+    return NextResponse.json(
+      { message: `Could not delete this photo. ${getErrorMessage(error)}` },
       { status: 500 }
     );
   }

@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { MemorySummary } from "@/lib/types";
 
 const categoryOptions = [
   "Grandma and her GrandKids",
@@ -13,6 +14,7 @@ const categoryOptions = [
 ] as const;
 
 type SaveState = "idle" | "saving" | "error";
+type FormMode = "new" | "append";
 
 type EditablePhoto = {
   id: string;
@@ -24,6 +26,7 @@ type EditablePhoto = {
 
 type MemoryFormProps = {
   canPostInitial: boolean;
+  existingMemories: MemorySummary[];
 };
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -71,13 +74,15 @@ async function optimizeImage(file: File): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.88);
 }
 
-export function MemoryForm({ canPostInitial }: MemoryFormProps) {
+export function MemoryForm({ canPostInitial, existingMemories }: MemoryFormProps) {
   const router = useRouter();
   const [canPost, setCanPost] = useState(canPostInitial);
   const [loginPassword, setLoginPassword] = useState("");
   const [loginStatus, setLoginStatus] = useState<"idle" | "loading" | "error">("idle");
   const [loginMessage, setLoginMessage] = useState("");
 
+  const [formMode, setFormMode] = useState<FormMode>("new");
+  const [selectedMemoryId, setSelectedMemoryId] = useState(existingMemories[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<(typeof categoryOptions)[number]>(categoryOptions[0]);
   const [customCategory, setCustomCategory] = useState("");
@@ -93,6 +98,19 @@ export function MemoryForm({ canPostInitial }: MemoryFormProps) {
     }
     return category;
   }, [category, customCategory]);
+
+  const selectedMemory = useMemo(
+    () => existingMemories.find((memory) => memory.id === selectedMemoryId) ?? null,
+    [existingMemories, selectedMemoryId]
+  );
+
+  useEffect(() => {
+    if (selectedMemoryId && existingMemories.some((memory) => memory.id === selectedMemoryId)) {
+      return;
+    }
+
+    setSelectedMemoryId(existingMemories[0]?.id ?? "");
+  }, [existingMemories, selectedMemoryId]);
 
   const activePhoto = useMemo(() => {
     if (photos.length === 0) {
@@ -212,15 +230,21 @@ export function MemoryForm({ canPostInitial }: MemoryFormProps) {
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!finalCategory) {
+    if (photos.length === 0) {
+      setStatus("error");
+      setMessage("Please choose at least one memory photo.");
+      return;
+    }
+
+    if (formMode === "new" && !finalCategory) {
       setStatus("error");
       setMessage("Please provide a category.");
       return;
     }
 
-    if (photos.length === 0) {
+    if (formMode === "append" && !selectedMemoryId) {
       setStatus("error");
-      setMessage("Please choose at least one memory photo.");
+      setMessage("Please choose a saved category.");
       return;
     }
 
@@ -228,26 +252,36 @@ export function MemoryForm({ canPostInitial }: MemoryFormProps) {
     setMessage("");
 
     try {
+      const photosPayload = photos.map((photo) => ({
+        imageData: photo.imageData,
+        zoom: photo.zoom,
+        rotation: photo.rotation
+      }));
+
+      const requestBody =
+        formMode === "append"
+          ? {
+              appendToMemoryId: selectedMemoryId,
+              photos: photosPayload
+            }
+          : {
+              title,
+              category: finalCategory,
+              story,
+              photos: photosPayload
+            };
+
       const response = await fetch("/api/memories", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          title,
-          category: finalCategory,
-          story,
-          photos: photos.map((photo) => ({
-            imageData: photo.imageData,
-            zoom: photo.zoom,
-            rotation: photo.rotation
-          }))
-        })
+        body: JSON.stringify(requestBody)
       });
 
-      const payload = (await response.json()) as { message?: string };
+      const responseBody = (await response.json()) as { message?: string };
       if (!response.ok) {
-        throw new Error(payload.message ?? "Could not save memory.");
+        throw new Error(responseBody.message ?? "Could not save memory.");
       }
 
       setTitle("");
@@ -257,7 +291,11 @@ export function MemoryForm({ canPostInitial }: MemoryFormProps) {
       setPhotos([]);
       setActivePhotoId("");
       setStatus("idle");
-      setMessage("Memory posted with all selected photos.");
+      setMessage(
+        formMode === "append"
+          ? "Photos added to the selected saved category."
+          : "Memory posted with all selected photos."
+      );
       router.refresh();
     } catch (error) {
       setStatus("error");
@@ -312,7 +350,7 @@ export function MemoryForm({ canPostInitial }: MemoryFormProps) {
         <div>
           <h2 className="text-2xl font-semibold text-ink">Add a magical memory</h2>
           <p className="mt-1 text-sm text-amber-900/80">
-            One title and category can now hold many photos. Adjust each photo before posting.
+            Create a new memory or add more photos to an existing saved category.
           </p>
         </div>
         <button
@@ -324,62 +362,117 @@ export function MemoryForm({ canPostInitial }: MemoryFormProps) {
         </button>
       </div>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
-        <label className="flex flex-col gap-2 text-sm font-medium text-ink">
-          Memory title
-          <input
-            required
-            minLength={2}
-            maxLength={120}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Grandma and her GrandKids"
-            className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember focus:ring-2 focus:ring-ember/20"
-          />
-        </label>
-
-        <label className="flex flex-col gap-2 text-sm font-medium text-ink">
-          Category
-          <select
-            value={category}
-            onChange={(event) => setCategory(event.target.value as (typeof categoryOptions)[number])}
-            className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember focus:ring-2 focus:ring-ember/20"
+      {existingMemories.length > 0 ? (
+        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setFormMode("new")}
+            className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+              formMode === "new"
+                ? "border-ember bg-ember/10 text-ember"
+                : "border-amber-200 bg-white text-amber-900 hover:bg-amber-50"
+            }`}
           >
-            {categoryOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {category === "Other" ? (
-        <label className="mt-4 flex flex-col gap-2 text-sm font-medium text-ink">
-          Custom category
-          <input
-            required
-            minLength={2}
-            maxLength={80}
-            value={customCategory}
-            onChange={(event) => setCustomCategory(event.target.value)}
-            placeholder="Shushu and her nieces"
-            className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember focus:ring-2 focus:ring-ember/20"
-          />
-        </label>
+            Create new memory
+          </button>
+          <button
+            type="button"
+            onClick={() => setFormMode("append")}
+            className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+              formMode === "append"
+                ? "border-ember bg-ember/10 text-ember"
+                : "border-amber-200 bg-white text-amber-900 hover:bg-amber-50"
+            }`}
+          >
+            Add photos to saved category
+          </button>
+        </div>
       ) : null}
 
-      <label className="mt-4 flex flex-col gap-2 text-sm font-medium text-ink">
-        Memory story (optional)
-        <textarea
-          value={story}
-          onChange={(event) => setStory(event.target.value)}
-          maxLength={3000}
-          rows={4}
-          placeholder="Tell everyone what made this day special..."
-          className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember focus:ring-2 focus:ring-ember/20"
-        />
-      </label>
+      {formMode === "append" ? (
+        <div className="mt-5 space-y-3">
+          <label className="flex flex-col gap-2 text-sm font-medium text-ink">
+            Saved category
+            <select
+              value={selectedMemoryId}
+              onChange={(event) => setSelectedMemoryId(event.target.value)}
+              className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember focus:ring-2 focus:ring-ember/20"
+            >
+              {existingMemories.map((memory) => (
+                <option key={memory.id} value={memory.id}>
+                  {memory.category} - {memory.title}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {selectedMemory ? (
+            <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-900/85">
+              Adding to <span className="font-semibold">{selectedMemory.category}</span> ({selectedMemory.photoCount}{" "}
+              photos already)
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-2 text-sm font-medium text-ink">
+              Memory title
+              <input
+                required
+                minLength={2}
+                maxLength={120}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Grandma and her GrandKids"
+                className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember focus:ring-2 focus:ring-ember/20"
+              />
+            </label>
+
+            <label className="flex flex-col gap-2 text-sm font-medium text-ink">
+              Category
+              <select
+                value={category}
+                onChange={(event) => setCategory(event.target.value as (typeof categoryOptions)[number])}
+                className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember focus:ring-2 focus:ring-ember/20"
+              >
+                {categoryOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {category === "Other" ? (
+            <label className="mt-4 flex flex-col gap-2 text-sm font-medium text-ink">
+              Custom category
+              <input
+                required
+                minLength={2}
+                maxLength={80}
+                value={customCategory}
+                onChange={(event) => setCustomCategory(event.target.value)}
+                placeholder="Shushu and her nieces"
+                className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember focus:ring-2 focus:ring-ember/20"
+              />
+            </label>
+          ) : null}
+
+          <label className="mt-4 flex flex-col gap-2 text-sm font-medium text-ink">
+            Memory story (optional)
+            <textarea
+              value={story}
+              onChange={(event) => setStory(event.target.value)}
+              maxLength={3000}
+              rows={4}
+              placeholder="Tell everyone what made this day special..."
+              className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember focus:ring-2 focus:ring-ember/20"
+            />
+          </label>
+        </>
+      )}
 
       <label className="mt-4 flex flex-col gap-2 text-sm font-medium text-ink">
         Choose photos (you can pick many)
@@ -476,7 +569,13 @@ export function MemoryForm({ canPostInitial }: MemoryFormProps) {
         disabled={status === "saving"}
         className="mt-5 inline-flex items-center rounded-xl bg-ember px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#c94d43] disabled:cursor-not-allowed disabled:opacity-70"
       >
-        {status === "saving" ? "Saving memory..." : "Post memory"}
+        {status === "saving"
+          ? formMode === "append"
+            ? "Adding photos..."
+            : "Saving memory..."
+          : formMode === "append"
+            ? "Add photos"
+            : "Post memory"}
       </button>
     </form>
   );
