@@ -191,6 +191,7 @@ export function MemoryForm({ canPostInitial, existingMemories }: MemoryFormProps
     setCanPost(false);
     setLoginStatus("idle");
     setLoginMessage("Logged out. Login again to post photos.");
+    router.refresh();
   }
 
   async function handleImageSelect(fileList: FileList | null) {
